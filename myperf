@@ -1,0 +1,113 @@
+#!/usr/bin/python3
+import argparse
+import socket
+import os, time
+
+TIMEOUT = 1 #seconds
+
+
+def client(host, port, _time, length):
+    payload = os.urandom(length)
+    packets_sent = 0
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+    try:
+        s.connect((host, port))
+    except socket.error:
+        print ("Could not connect to server.")
+        return
+
+    #s.connect((host, port))
+    print(f"Connecting to host {host}, port {port}")
+    t_start = t_last = time.time()
+
+    while (t_last - t_start < _time):
+        s.sendall(payload)
+        t_last = time.time()
+        packets_sent += 1
+
+    print(f"      Interval: { round( t_last-t_start, 1 ) } s")
+    print(f"      Transfer: { round( packets_sent*length/1000000 ) } MBytes")
+    print(f"    Throughput: { round( (8*packets_sent*length)/(1000000*_time) ) } Mbps")
+
+    return
+#client()
+
+
+def server(port):
+    bytes_received = 0
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+    s.bind(('', port))
+
+    while True:
+        print ("-----------------------------------------------------------")
+        print ("Server listening on", port)
+        print ("-----------------------------------------------------------")
+    
+        s.listen(1)
+        conn, addr = s.accept()
+        print('Connected by', addr)
+
+        t_start = t_last = time.time()
+        
+        while True:
+            try:
+                now = time.time()
+                if (now-t_last > TIMEOUT):
+                    break
+                aux = len( conn.recv(1024) )
+                if (aux):
+                    bytes_received += aux
+                    t_last = time.time()
+                if not bytes_received: break
+
+            except socket.error:
+                print ("Error Occured.")
+                break
+
+        conn.close()
+        print(f"      Interval: { round( t_last-t_start, 1 ) } s")
+        print(f"      Transfer: { round( bytes_received/1000000 ) } MBytes")
+        print(f"    Throughput: { round( (8*bytes_received)/(1000000*(t_last-t_start)) ) } Mbps\n")
+    return
+#server()
+
+
+
+def main():
+
+    parser = argparse.ArgumentParser(description='Custom network perf.')
+    
+    parser.add_argument('-s', "--server", dest='s_mode', action="store_true", 
+                        help='run in server mode')
+    parser.add_argument('-c', "--client", dest='ip', type=str, default='',
+                        help='run in client mode (must provide URI)')
+
+    parser.add_argument('-p', "--port", default=5201, type=int, metavar='#',
+                        help='server port to listen on/connect to')
+                 
+    parser.add_argument('-t', "--time", default=10, type=int, metavar='s',
+                        help='time in seconds to transmit for (default 10 secs)')
+    
+    parser.add_argument('-l', "--length", default=1500, type=int, metavar='B',
+                        help='packet lenght to transmit (default 1500 bytes)')
+
+    args = parser.parse_args()
+
+    if args.s_mode == (args.ip != ''):
+        print("Please select server OR client mode")
+        return
+    
+    if args.s_mode :
+        server(args.port)
+    else:
+        client(args.ip, args.port, args.time, args.length)
+
+    return 0
+
+
+
+if __name__ == "__main__":
+    main()
